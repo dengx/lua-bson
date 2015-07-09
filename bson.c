@@ -27,6 +27,21 @@ init_winsock() {
 
 #endif
 
+#if LUA_VERSION_NUM >= 502
+
+#define LUA_RAWLEN lua_rawlen
+#define LUA_SETUSERVALUE lua_setuservalue
+#define LUA_GETUSERVALUE lua_getuservalue
+
+#else
+
+#define LUA_RAWLEN lua_objlen
+#define LUA_SETUSERVALUE lua_setfenv
+#define LUA_GETUSERVALUE lua_getfenv
+
+#endif
+
+
 #define DEFAULT_CAP 64
 #define MAX_NUMBER 1024
 
@@ -306,7 +321,7 @@ append_number(struct bson *bs, lua_State *L, const char *key, size_t sz) {
 
 static void
 append_table(struct bson *bs, lua_State *L, const char *key, size_t sz) {
-	size_t len = lua_rawlen(L, -1);
+	size_t len = LUA_RAWLEN(L, -1);
 	bool isarray = false;
 	if (len > 0) {
 		lua_pushinteger(L, len);
@@ -507,7 +522,7 @@ pack_ordered_dict(lua_State *L, struct bson *b, int n) {
  
 static int
 ltostring(lua_State *L) {
-	size_t sz = lua_rawlen(L, 1);
+	size_t sz = LUA_RAWLEN(L, 1);
 	void * ud = lua_touserdata(L,1);
 	lua_pushlstring(L, ud, sz);
 	return 1;
@@ -515,7 +530,7 @@ ltostring(lua_State *L) {
 
 static int
 llen(lua_State *L) {
-	size_t sz = lua_rawlen(L, 1);
+	size_t sz = LUA_RAWLEN(L, 1);
 	lua_pushinteger(L, sz);
 	return 1;
 }
@@ -750,7 +765,7 @@ lmakeindex(lua_State *L) {
 			lua_rawset(L,-3);
 		}
 	}
-	lua_setuservalue(L,1);
+	LUA_SETUSERVALUE(L,1);
 	lua_settop(L,1);
 
 	return 1;
@@ -794,7 +809,7 @@ replace_object(lua_State *L, int type, struct bson * bs) {
 
 static int
 lreplace(lua_State *L) {
-	lua_getuservalue(L,1);
+	LUA_GETUSERVALUE(L,1);
 	if (!lua_istable(L,-1)) {
 		return luaL_error(L, "call makeindex first");
 	}
@@ -887,7 +902,13 @@ bson_meta(lua_State *L) {
 			{ "makeindex", lmakeindex },
 			{ NULL, NULL },
 		};
-		luaL_newlib(L,l);
+
+#if LUA_VERSION_NUM >= 502
+	luaL_newlib(L,l);
+#else
+	luaL_register(L, "bson_meta", l);
+#endif
+
 		lua_setfield(L, -2, "__index");
 		lua_pushcfunction(L, ltostring);
 		lua_setfield(L, -2, "__tostring");
@@ -1209,7 +1230,11 @@ lobjectid(lua_State *L) {
 
 int
 luaopen_bson(lua_State *L) {
+
+#if LUA_VERSION_NUM >= 502
 	luaL_checkversion(L);
+#endif
+
 	int i;
 	for (i=0;i<MAX_NUMBER;i++) {
 		char tmp[8];
@@ -1228,8 +1253,12 @@ luaopen_bson(lua_State *L) {
 		{ NULL,  NULL },
 	};
 
+#if LUA_VERSION_NUM >= 502
 	luaL_newlib(L,l);
-
+#else
+	luaL_register(L, "open_bson", l);
+#endif
+	
 	typeclosure(L);
 	lua_setfield(L,-2,"type");
 	char null[] = { 0, BSON_NULL };
